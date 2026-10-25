@@ -14,7 +14,7 @@ var aiTerm = regexp.MustCompile(`(?i)\b(ai|artificial intelligence|llms?|chatgpt
 var forbiddenCue = regexp.MustCompile(`(?i)(do not|don't|does not|never|not accept|not allowed|closed|prohibited|banned|forbidden|reject|decline|not welcome|unwelcome|will not be reviewed)`)
 
 // disclosureCue is language that accepts a contribution but demands a label.
-var disclosureCue = regexp.MustCompile(`(?i)(disclos|attribut|co-authored-by|state (that|it|whether)|must be clearly|declare|mention (that|it)|note (that|in the)|identify|include|summar|provide)`)
+var disclosureCue = regexp.MustCompile(`(?i)(disclos|attribut|co-authored-by|state (that|it|whether|the|your|any|which)|must be clearly|declare|mention (that|it)|note (that|in the)|identify|include|summar|provide)`)
 
 // contributionNoun keeps the forbidden check honest. "We do not have an AI
 // policy" also contains "do not" and "AI", and that sentence means the
@@ -48,6 +48,38 @@ func Classify(path, text string) []Evidence {
 			Text: collapse(line),
 			Kind: kind,
 		})
+	}
+	return out
+}
+
+// Explain returns the lines that mention AI but produced no verdict, each
+// with the cue it was missing. A policy phrased in a way the cue lists do not
+// cover shows up here instead of silently becoming ALLOWED.
+func Explain(path, text string) []NearMiss {
+	var out []NearMiss
+	for i, raw := range strings.Split(text, "\n") {
+		line := strings.TrimSpace(raw)
+		if len(line) < 12 || !aiTerm.MatchString(line) {
+			continue
+		}
+		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "|") {
+			continue
+		}
+		if classifyLine(line) != Allowed {
+			continue
+		}
+
+		var reason string
+		switch {
+		case !forbiddenCue.MatchString(line) && !disclosureCue.MatchString(line) && !obscured.MatchString(line):
+			reason = "mentions AI, but has no refusal or disclosure cue"
+		case forbiddenCue.MatchString(line) && !contributionNoun.MatchString(line):
+			reason = "has a refusal cue, but no word for the thing refused"
+		default:
+			reason = "mentions AI, but reads as neither a refusal nor a requirement"
+		}
+
+		out = append(out, NearMiss{Path: path, Line: i + 1, Text: collapse(line), Reason: reason})
 	}
 	return out
 }

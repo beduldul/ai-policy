@@ -48,10 +48,25 @@ type Evidence struct {
 	Kind Verdict
 }
 
+// NearMiss is a line that mentions AI but matched no rule, together with the
+// reason it did not. It is what --explain prints when a verdict looks wrong.
+type NearMiss struct {
+	// Path is repository-relative, e.g. "CONTRIBUTING.md".
+	Path string
+	// Line is 1-based.
+	Line int
+	// Text is the sentence, whitespace collapsed.
+	Text string
+	// Reason says which cue was missing.
+	Reason string
+}
+
 // Result is everything the CLI needs to print.
 type Result struct {
 	Verdict  Verdict
 	Evidence []Evidence
+	// NearMisses lists lines that mention AI but decided nothing.
+	NearMisses []NearMiss
 	// Checked lists the files that existed and were read.
 	Checked []string
 	// Missing lists the files that were looked for and not found.

@@ -101,3 +101,12 @@ func TestClassifyIgnoresAIMentionedInPassing(t *testing.T) {
 		t.Fatalf("expected no evidence, got %+v", got)
 	}
 }
+
+func TestClassifyTemplatePrompt(t *testing.T) {
+	// A PR template comment that asks the author to name the model.
+	text := "<!-- Which AI model if anyone was used, please state the details -->\n"
+	got := Classify("pull_request_template.md", text)
+	if len(got) != 1 || got[0].Kind != DisclosureRequired {
+		t.Fatalf("expected one disclosure requirement, got %+v", got)
+	}
+}

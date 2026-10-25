@@ -77,6 +77,16 @@ Just the verdict:
 ai-policy --quiet pallets/click
 ```
 
+When a verdict looks wrong, ask what it skipped:
+
+```sh
+ai-policy --explain tqdm/tqdm
+```
+
+Every line that mentions AI but decided nothing is listed with the cue it was
+missing, so a policy phrased in a way the cue lists do not cover is visible
+instead of silently becoming `ALLOWED`.
+
 ## Exit codes
 
 | Code | Verdict | Meaning |
@@ -97,7 +107,7 @@ In priority order, per repository:
 2. `CONTRIBUTING.md` (also `docs/`, `.github/`, any capitalisation)
 3. `.github/PULL_REQUEST_TEMPLATE.md`
 4. `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`
-5. `README.md`, only if nothing above exists
+5. `README.md`, only if nothing above exists — never alongside them
 
 Policy documents linked from any of those are followed one level deep, including
 reference-style markdown links and `github.com/.../blob/...` URLs. The
@@ -127,9 +137,9 @@ replacement for reading it.
 
 ## Limitations
 
-- **Public repositories only.** Private repositories need an authenticated API
-  call, which this version does not do. `--path` works on a local clone of
-  anything.
+- **Private repositories need a token.** Set `GITHUB_TOKEN` to a token with
+  `repo` scope and private repositories work; without it they come back as an
+  error, not as `ALLOWED`. `--path` works on a local clone of anything.
 - **English only.** The cue lists are English phrases.
 - **Heuristics, not comprehension.** A policy phrased in a way none of the cues
   cover will come back `ALLOWED`. When a repository mentions AI at all, the

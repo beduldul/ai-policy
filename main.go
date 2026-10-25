@@ -26,13 +26,14 @@ func main() {
 		path    = flag.String("path", "", "check a local clone instead of a remote repository")
 		asJSON  = flag.Bool("json", false, "print machine readable output")
 		quiet   = flag.Bool("quiet", false, "print only the verdict")
+		explain = flag.Bool("explain", false, "show lines that mention AI but matched no rule")
 		version = flag.Bool("version", false, "print the version and exit")
 	)
 	flag.Usage = usage
 	flag.Parse()
 
 	if *version {
-		fmt.Println("ai-policy 0.1.0")
+		fmt.Println("ai-policy 0.2.0")
 		return
 	}
 
@@ -80,7 +81,7 @@ func main() {
 	} else if *quiet {
 		fmt.Println(res.Verdict)
 	} else {
-		print(res, label)
+		print(res, label, *explain)
 	}
 
 	switch res.Verdict {
@@ -91,7 +92,7 @@ func main() {
 	}
 }
 
-func print(res *policy.Result, label string) {
+func print(res *policy.Result, label string, explain bool) {
 	fmt.Printf("%s  %s\n", res.Verdict, label)
 
 	if len(res.Evidence) == 0 {
@@ -99,6 +100,17 @@ func print(res *policy.Result, label string) {
 	} else {
 		for _, e := range res.Evidence {
 			fmt.Printf("\n  %s:%d\n  %q\n", e.Path, e.Line, e.Text)
+		}
+	}
+
+	if explain {
+		if len(res.NearMisses) == 0 {
+			fmt.Println("\n  No lines mentioning AI were skipped.")
+		} else {
+			fmt.Printf("\n  Skipped %d line(s) that mention AI:\n", len(res.NearMisses))
+			for _, n := range res.NearMisses {
+				fmt.Printf("\n  %s:%d  (%s)\n  %q\n", n.Path, n.Line, n.Reason, n.Text)
+			}
 		}
 	}
 
@@ -115,6 +127,7 @@ Usage:
   ai-policy <owner/repo>     check a public repository
   ai-policy --path <dir>     check a local clone
   ai-policy --json <target>  machine readable output
+  ai-policy --explain <target>  also show lines that mention AI but decided nothing
 
 Exit codes:
   0   ALLOWED               no AI rule found

@@ -59,6 +59,19 @@ func Discover(paths []string) []string {
 		return picked[i].path < picked[j].path
 	})
 
+	// README.md is a last resort, not an extra source: a repository that has
+	// a CONTRIBUTING.md has already said everything it wants to say there,
+	// and reading the README on top only adds marketing copy to the output.
+	if len(picked) > 1 && picked[0].rank < 5 {
+		kept := picked[:0]
+		for _, p := range picked {
+			if p.rank < 5 {
+				kept = append(kept, p)
+			}
+		}
+		picked = kept
+	}
+
 	out := make([]string, len(picked))
 	for i, p := range picked {
 		out[i] = p.path
@@ -68,9 +81,19 @@ func Discover(paths []string) []string {
 
 // rank orders a path by how authoritative it is as a statement of policy.
 // -1 means the file is not a policy document at all.
+// textExtensions are the only files worth reading. Without this guard a
+// repository with resources/claude.webp gets its bytes classified as prose.
+var textExtensions = map[string]bool{
+	"": true, ".md": true, ".markdown": true, ".rst": true, ".txt": true, ".adoc": true,
+}
+
 func rank(p string) int {
 	base := strings.ToLower(path.Base(p))
-	stem := strings.TrimSuffix(base, path.Ext(base))
+	ext := path.Ext(base)
+	if !textExtensions[ext] {
+		return -1
+	}
+	stem := strings.TrimSuffix(base, ext)
 
 	// Anything buried deeper than a conventional docs folder is source code
 	// that happens to share a name: tests/AGENTS.md, resources/claude.webp,
@@ -124,6 +147,13 @@ func LinkedPolicies(fromPath, body string) []string {
 		}
 		if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") ||
 			strings.HasPrefix(target, "#") || strings.HasPrefix(target, "mailto:") {
+			continue
+		}
+		// A link may point at a section of the same file.
+		if i := strings.IndexByte(target, '#'); i >= 0 {
+			target = target[:i]
+		}
+		if target == "" {
 			continue
 		}
 		target = strings.TrimPrefix(target, "./")
@@ -337,6 +367,36 @@ func (c *Client) tree(owner, repo string) ([]string, error) {
 func (c *Client) raw(owner, repo, p string) (string, error) {
 	url := fmt.Sprintf("%s/%s/%s/HEAD/%s", c.RawURL, owner, repo, p)
 	resp, err := c.HTTP.Get(url)
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			b, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			return string(b), readErr
+		}
+	}
+	// raw.githubusercontent.com does not serve private repositories. Fall
+	// back to the contents API, which honours GITHUB_TOKEN.
+	if c.Token != "" {
+		return c.contents(owner, repo, p)
+	}
+	if err != nil {
+		return "", err
+	}
+	return "", fmt.Errorf("%s: %s", p, resp.Status)
+}
+
+// contents reads one file through the REST contents API. It is the only path
+// that works for a private repository, and it needs a token with repo scope.
+func (c *Client) contents(owner, repo, p string) (string, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/contents/%s?ref=HEAD", c.APIURL, owner, repo, p)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github.raw")
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+
+	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -344,7 +404,6 @@ func (c *Client) raw(owner, repo, p string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%s: %s", p, resp.Status)
 	}
-	// Policy docs are small; 1 MiB stops a hostile server from streaming.
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return "", err
@@ -357,6 +416,7 @@ func apply(res *Result, p, body string) {
 	for _, e := range Classify(p, body) {
 		res.add(e)
 	}
+	res.NearMisses = append(res.NearMisses, Explain(p, body)...)
 }
 
 // SplitTarget turns "owner/repo" or a github.com URL into its two halves.

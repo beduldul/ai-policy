@@ -15,6 +15,8 @@ func TestDiscover(t *testing.T) {
 		"AGENTS.md",
 		"src/main.go",
 		".github/workflows/ci.yml",
+		"resources/claude.webp", // a picture, not a policy
+		"docs/ai-policy.png",
 	}
 
 	got := Discover(paths)
@@ -24,7 +26,6 @@ func TestDiscover(t *testing.T) {
 		"docs/contributing.md",
 		".github/PULL_REQUEST_TEMPLATE.md",
 		"AGENTS.md", // agent instructions last
-		"README.md", // last resort fallback
 	}
 
 	if !reflect.DeepEqual(got, want) {
@@ -62,5 +63,23 @@ func TestLinkedPoliciesIgnoresUnrelatedLinks(t *testing.T) {
 	body := "Read [the docs](docs/install.md) and [the api](api/reference.md)."
 	if got := LinkedPolicies("CONTRIBUTING.md", body); len(got) != 0 {
 		t.Fatalf("expected no policy links, got %v", got)
+	}
+}
+
+func TestLinkedPoliciesStripsAnchors(t *testing.T) {
+	body := "See [the AI section](CONTRIBUTING.md#ai-agents) and [again](CONTRIBUTING.md)."
+	got := LinkedPolicies(".github/CONTRIBUTING.md", body)
+	want := []string{".github/CONTRIBUTING.md"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("LinkedPolicies() = %v, want %v", got, want)
+	}
+}
+
+func TestDiscoverUsesReadmeOnlyAsFallback(t *testing.T) {
+	if got := Discover([]string{"README.md", "CONTRIBUTING.md"}); !reflect.DeepEqual(got, []string{"CONTRIBUTING.md"}) {
+		t.Fatalf("README should be dropped when CONTRIBUTING exists, got %v", got)
+	}
+	if got := Discover([]string{"README.md"}); !reflect.DeepEqual(got, []string{"README.md"}) {
+		t.Fatalf("README should be used when it is all there is, got %v", got)
 	}
 }
