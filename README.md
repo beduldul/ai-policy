@@ -28,6 +28,9 @@ On macOS with Homebrew:
 brew install beduldul/tap/ai-policy
 ```
 
+Homebrew 7 will ask whether to trust a cask from a third-party tap; `brew trust
+--cask beduldul/tap/ai-policy` answers that up front.
+
 With Go:
 
 ```sh
