@@ -252,6 +252,7 @@ func NewClient() *Client {
 func (c *Client) FromGitHub(owner, repo string) (*Result, error) {
 	res := &Result{Verdict: Allowed}
 	found := false
+	var firstErr error
 
 	if paths, err := c.tree(owner, repo); err == nil {
 		if r, ok := read(Discover(paths), func(p string) (string, error) {
@@ -259,6 +260,8 @@ func (c *Client) FromGitHub(owner, repo string) (*Result, error) {
 		}); ok {
 			res, found = r, true
 		}
+	} else if firstErr == nil {
+		firstErr = err
 	}
 
 	if paths, err := c.tree(owner, ".github"); err == nil {
@@ -274,7 +277,12 @@ func (c *Client) FromGitHub(owner, repo string) (*Result, error) {
 	}
 
 	if !found {
-		return nil, fmt.Errorf("no policy file found in %s/%s (is the repository public?)", owner, repo)
+		// A rate limit or a missing repository is the real reason, not an
+		// absence of policy files; saying so saves a confusing hunt.
+		if firstErr != nil {
+			return nil, firstErr
+		}
+		return nil, fmt.Errorf("no policy file found in %s/%s", owner, repo)
 	}
 	return res, nil
 }
@@ -342,6 +350,13 @@ func (c *Client) tree(owner, repo string) ([]string, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		// GitHub answers 403 (not 429) when the anonymous quota runs out.
+		return nil, fmt.Errorf("listing %s/%s: %s — the unauthenticated API allows 60 requests an hour; set GITHUB_TOKEN to raise it", owner, repo, resp.Status)
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("listing %s/%s: %s — repository not found, or private without GITHUB_TOKEN", owner, repo, resp.Status)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("listing %s/%s: %s", owner, repo, resp.Status)
 	}

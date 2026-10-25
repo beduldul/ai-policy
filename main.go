@@ -33,7 +33,7 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Println("ai-policy 0.2.0")
+		fmt.Println("ai-policy 0.2.1")
 		return
 	}
 
