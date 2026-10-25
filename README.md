@@ -15,17 +15,27 @@ you which of the three situations you are in — with the exact line it read.
 
 ## Install
 
+As a `gh` extension:
+
+```sh
+gh extension install beduldul/gh-ai-policy
+gh ai-policy pallets/click
+```
+
+On macOS with Homebrew:
+
+```sh
+brew install beduldul/tap/ai-policy
+```
+
+With Go:
+
 ```sh
 go install github.com/beduldul/ai-policy@latest
 ```
 
-Or build from a clone:
-
-```sh
-git clone https://github.com/beduldul/ai-policy
-cd ai-policy
-go build -o ai-policy .
-```
+Or take the binary for your platform from the
+[releases page](https://github.com/beduldul/ai-policy/releases).
 
 ## Usage
 
@@ -137,6 +147,11 @@ replacement for reading it.
 
 ## Limitations
 
+- **Rate limits are real but survivable.** GitHub allows 60 unauthenticated API
+  requests an hour, which is about 30 lookups. When that runs out the tool falls
+  back to probing the conventional file paths through `raw.githubusercontent.com`,
+  which does not count against the quota. Set `GITHUB_TOKEN` for the full
+  repository listing.
 - **Private repositories need a token.** Set `GITHUB_TOKEN` to a token with
   `repo` scope and private repositories work; without it they come back as an
   error, not as `ALLOWED`. `--path` works on a local clone of anything.

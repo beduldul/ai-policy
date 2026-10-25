@@ -27,6 +27,29 @@ var linkDefinition = regexp.MustCompile(`(?m)^\[[^\]]+\]:\s*(\S+)`)
 // githubBlob rewrites a browser URL into a repository path.
 var githubBlob = regexp.MustCompile(`^https?://github\.com/[^/]+/[^/]+/(?:blob|tree)/[^/]+/(.+)$`)
 
+// knownPaths is probed when the tree API is unavailable: rate limited, or a
+// private repository without a token. raw.githubusercontent.com does not count
+// against the API quota, so the tool keeps working with 60 requests an hour
+// already spent. Both capitalisations of the docs path are listed because the
+// raw host is case sensitive.
+var knownPaths = []string{
+	".github/AI_POLICY.md",
+	".github/CONTRIBUTING.md",
+	".github/CONTRIBUTING.rst",
+	".github/PULL_REQUEST_TEMPLATE.md",
+	".github/pull_request_template.md",
+	"CONTRIBUTING.md",
+	"CONTRIBUTING.rst",
+	"docs/CONTRIBUTING.md",
+	"docs/contributing.md",
+	"PULL_REQUEST_TEMPLATE.md",
+	"AGENTS.md",
+	"CLAUDE.md",
+	".cursorrules",
+	".github/copilot-instructions.md",
+	"README.md",
+}
+
 // Discover picks the policy files out of a repository file listing. Order is
 // the whole point: a dedicated AI policy outranks a general contributing
 // guide, which outranks an agent instruction file, which outranks anything
@@ -254,25 +277,33 @@ func (c *Client) FromGitHub(owner, repo string) (*Result, error) {
 	found := false
 	var firstErr error
 
+	fetch := func(p string) (string, error) { return c.raw(owner, repo, p) }
+
 	if paths, err := c.tree(owner, repo); err == nil {
-		if r, ok := read(Discover(paths), func(p string) (string, error) {
-			return c.raw(owner, repo, p)
-		}); ok {
+		if r, ok := read(Discover(paths), fetch); ok {
 			res, found = r, true
 		}
-	} else if firstErr == nil {
-		firstErr = err
+	} else {
+		// No tree listing: probe the conventional paths instead. Slower and
+		// blind to unusual layouts, but it needs no API quota.
+		if r, ok := read(knownPaths, fetch); ok {
+			res, found = r, true
+		} else if firstErr == nil {
+			firstErr = err
+		}
 	}
 
-	if paths, err := c.tree(owner, ".github"); err == nil {
-		if r, ok := read(Discover(paths), func(p string) (string, error) {
-			return c.raw(owner, ".github", p)
-		}); ok {
-			if found {
-				merge(res, r, owner+"/.github")
-			} else {
-				res, found = r, true
-			}
+	orgFetch := func(p string) (string, error) { return c.raw(owner, ".github", p) }
+
+	orgPaths, orgErr := c.tree(owner, ".github")
+	if orgErr != nil {
+		orgPaths = knownPaths
+	}
+	if r, ok := read(Discover(orgPaths), orgFetch); ok {
+		if found {
+			merge(res, r, owner+"/.github")
+		} else {
+			res, found = r, true
 		}
 	}
 
