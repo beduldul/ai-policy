@@ -121,13 +121,15 @@ func print(res *policy.Result, label string, explain bool) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `ai-policy — does this repository accept AI-assisted contributions?
+	fmt.Fprintf(flag.CommandLine.Output(), `ai-policy — does this repository accept AI-assisted contributions?
 
 Usage:
-  ai-policy <owner/repo>     check a public repository
-  ai-policy --path <dir>     check a local clone
-  ai-policy --json <target>  machine readable output
+  ai-policy <owner/repo>        check a public repository
+  ai-policy --path <dir>        check a local clone
+  ai-policy --json <target>     machine readable output
+  ai-policy --quiet <target>    print only the verdict
   ai-policy --explain <target>  also show lines that mention AI but decided nothing
+  ai-policy --version           print the version and exit
 
 Exit codes:
   0   ALLOWED               no AI rule found
